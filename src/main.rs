@@ -1,20 +1,32 @@
 #![allow(unused_must_use)]
 #![allow(unused_imports)]
 
-mod window_defs;
 mod utils;
+mod window_defs;
 
-use window_defs::primary;
+use utils::enum_window;
 use utils::window_messages::message_to_string;
+use window_defs::primary;
 
-use tracing::{ info, Level };
+use std::time::{Duration, Instant};
+use tracing::{error, warn, debug, info, trace, Level};
 use tracing_subscriber::FmtSubscriber;
 use windows::core::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
-use std::time::{ Duration, Instant };
 
+/*
+ * TODO:
+ * A drop down for each window handle currently running in the OS. The edit_ctrl then starts
+ * printing that handle's Window Messages.
+ *
+ * TODO:
+ * Hook chains
+ * A function that intercepts a particular type of event is called a hook procedure. A hook
+ * procedure can act on each event it receives, then modify or discard the event.
+ */
 fn main() {
     // Tracing setup
+    // Level::OFF < ERROR < WARN < DEBUG = INFO < TRACE
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::DEBUG)
         .finish();
@@ -27,13 +39,16 @@ fn main() {
     let mut msg: MSG = unsafe { std::mem::zeroed() };
     unsafe {
         let mut timer = Instant::now();
-        while GetMessageW(&mut msg, None, 0, 0).into() {
+        while IsWindow(hwnd).into() && GetMessageW(&mut msg, None, 0, 0).into() {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
 
             if timer.elapsed() >= Duration::from_secs(1) {
                 timer = Instant::now();
-                primary::adjust_edit_ctrl(hwnd).expect("Failed to adjust text");
+                primary::adjust_edit_ctrl(hwnd, Some(message_to_string(msg.message)))
+                    .expect("Failed to adjust text");
+                error!("HERE");
+                enum_window::enum_window(primary::get_edit_ctrl_handle(hwnd));
             }
         }
     }
