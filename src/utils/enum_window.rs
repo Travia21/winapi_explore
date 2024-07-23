@@ -1,9 +1,6 @@
 #![allow(dead_code)]
 
-use windows::{
-    Win32::Foundation::*,
-    Win32::UI::WindowsAndMessaging::*,
-};
+use windows::{Win32::Foundation::*, Win32::UI::WindowsAndMessaging::*};
 
 pub extern "system" fn enum_window(hwnd: HWND) -> BOOL {
     unsafe {
@@ -18,7 +15,10 @@ pub extern "system" fn enum_window(hwnd: HWND) -> BOOL {
         GetWindowInfo(hwnd, &mut info).unwrap();
 
         if !text.is_empty() && info.dwStyle.contains(WS_VISIBLE) {
-            println!("text: {} (left: {}, top: {})", text, info.rcWindow.left, info.rcWindow.top);
+            println!(
+                "text: {} (left: {}, top: {})",
+                text, info.rcWindow.left, info.rcWindow.top
+            );
         }
 
         true.into()

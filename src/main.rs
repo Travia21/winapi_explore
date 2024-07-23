@@ -9,7 +9,7 @@ use utils::window_messages::message_to_string;
 use window_defs::primary;
 
 use std::time::{Duration, Instant};
-use tracing::{error, warn, debug, info, trace, Level};
+use tracing::{debug, error, info, trace, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 use windows::core::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -33,22 +33,26 @@ fn main() {
     tracing::subscriber::set_global_default(subscriber)
         .expect("Set tracing default subscriber failed.");
 
-    let hwnd = primary::init("class_name", "Some window");
+    let hwnd = primary::build_window("class_name", "Some window");
 
     // Message loop
     let mut msg: MSG = unsafe { std::mem::zeroed() };
     unsafe {
         let mut timer = Instant::now();
-        while IsWindow(hwnd).into() && GetMessageW(&mut msg, None, 0, 0).into() {
+        while IsWindow(hwnd).into() && GetMessageW(&mut msg, hwnd, 0, 0).into() {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
 
+            error!("\n\nmsg: {}", message_to_string(msg.message));
+
             if timer.elapsed() >= Duration::from_secs(1) {
                 timer = Instant::now();
+                primary::adjust_edit_ctrl(hwnd, None);
+                /*
                 primary::adjust_edit_ctrl(hwnd, Some(message_to_string(msg.message)))
                     .expect("Failed to adjust text");
-                error!("HERE");
-                enum_window::enum_window(primary::get_edit_ctrl_handle(hwnd));
+                */
+                //enum_window::enum_window(primary::get_edit_ctrl_handle(hwnd));
             }
         }
     }

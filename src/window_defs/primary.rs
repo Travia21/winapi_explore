@@ -1,75 +1,42 @@
 #![allow(unused_imports)]
+#![allow(dead_code)]
 
 use crate::utils::window_messages::message_to_string;
+use crate::window_defs::edit_ctrl;
 
 use std::ffi::c_void;
 use std::mem;
 use std::ptr::null_mut;
-use tracing::{error, warn, debug, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use windows::{
     core::*,
     Win32::{
         Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM},
         Graphics::Gdi::*,
-        System::LibraryLoader::GetModuleHandleW,
+        System::{
+            LibraryLoader::GetModuleHandleW,
+            SystemServices::SS_NOTIFY,
+        },
         UI::WindowsAndMessaging::*,
     },
 };
 
-const EDIT_CTRL_ID: i32 = 101;
-const BUTTON1_ID: i32 = 201;
-const BUTTON2_ID: i32 = 202;
-const BUTTON3_ID: i32 = 203;
-const BUTTON4_ID: i32 = 204;
+pub const EDIT_CTRL_ID: i32 = 101;
+pub const BUTTON1_ID: i32 = 201;
+pub const BUTTON2_ID: i32 = 202;
+pub const BUTTON3_ID: i32 = 203;
+pub const BUTTON4_ID: i32 = 204;
 
 //These are wrong
 // TODO: Figure out render width of characters in the edit_ctrl
 const CHARACTER_WIDTH: i32 = 8; // Estimated average character width
 const MAX_WIDTH: i32 = 768; // Maximum width for the text field
 
-pub fn adjust_edit_ctrl(hwnd: HWND, text: Option<&str>) -> Result<()> {
-    let text: String = match text {
-        Some(input) => String::from(input),
-        None => read_text_from_file("resources/strings.txt").expect("Error reading file")
-    };
-    let width = (text.chars().count() as i32 * CHARACTER_WIDTH).min(MAX_WIDTH);
-    let height = calculate_text_height(&text, width);
-
-    warn!("width: {width} x height: {height}"); // placeholder
-
-    unsafe {
-        let text = HSTRING::from(text);
-        let edit_ctrl_hwnd = match GetDlgItem(hwnd, EDIT_CTRL_ID) {
-            Ok(handle) => handle,
-            Err(error) => {
-                error!("Error getting edit ctrl handle.\n{}", error);
-                return Err(error);
-            }
-        };
-
-        match SetWindowTextW(edit_ctrl_hwnd, PCWSTR(text.as_ptr())) {
-            Ok(_) => {
-                trace!("Successfully set window text");
-                Ok(())
-            }
-            Err(error) => {
-                error!("Error setting window text.\n{}", error);
-                Err(error)
-            }
-        }
-
-        /*
-         * TODO: Set edit_ctrl dimensions
-         */
-        
-    }
-}
-
 pub fn get_edit_ctrl_handle(main_window_hwnd: HWND) -> HWND {
     unsafe {
         match GetWindow(main_window_hwnd, GW_CHILD) {
             Ok(handle) => handle,
-            Err(error) => panic!("{error}")
+            Err(error) => panic!("{error}"),
         }
     }
 }
@@ -107,7 +74,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
      */
 
     match msg {
-        WM_CREATE => create_window(hwnd),
+        WM_CREATE => {
+            error!("find me");
+        },
         WM_COMMAND => {
             trace!("Window received WM_COMMAND");
             //match LOWORD(wparam as DWORD)
@@ -135,32 +104,93 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     LRESULT(0)
 }
 
-fn create_window(hwnd: HWND) {
+pub fn adjust_edit_ctrl(hwnd: HWND, text: Option<&str>) -> Result<()> {
     unsafe {
-        let h_instance: HINSTANCE = GetModuleHandleW(None)
-            .expect("Failed to get module handle")
-            .into();
-        let edit_ctrl_text = HSTRING::from("Initial text");
+        let edit_ctrl_hwnd = match GetDlgItem(hwnd, EDIT_CTRL_ID) {
+            Ok(handle) => handle,
+            Err(error) => {
+                error!("Error getting edit ctrl handle.\n{}", error);
+                return Err(error);
+            }
+        };
 
-        CreateWindowExW(
-            WINDOW_EX_STYLE::default(),
-            w!("EDIT"),
-            PCWSTR(edit_ctrl_text.as_ptr()),
-            WS_CHILD | WS_VISIBLE | WS_BORDER | WINDOW_STYLE(ES_LEFT as u32),
-            10,
-            10,
-            280,
-            25,
-            hwnd,
-            HMENU(EDIT_CTRL_ID as *mut c_void),
-            h_instance,
-            Some(null_mut()),
-        )
-        .expect("Failed to create initial WindowExW");
+        let mut info = WINDOWINFO {
+            // out var
+            cbSize: core::mem::size_of::<WINDOWINFO>() as u32,
+            ..Default::default()
+        };
+        GetWindowInfo(edit_ctrl_hwnd, &mut info);
+        let _cur_width = info.rcWindow.right - info.rcWindow.left;
+        let _cur_height = info.rcWindow.bottom - info.rcWindow.top;
+
+        let text: String = match text {
+            Some(input) => String::from(input),
+            //None => read_text_from_file("resources/strings.txt").expect("Error reading file"),
+            None => {
+                String::from(
+                    format!("w: {} x h: {}", _cur_width.to_string(), _cur_height.to_string())
+                )
+            }
+        };
+        //let new_width = (text.chars().count() as i32 * CHARACTER_WIDTH).min(MAX_WIDTH);
+        let new_width = 200;
+        let new_height = calculate_text_height(&text, new_width);
+        let text = HSTRING::from(text);
+
+        match SetWindowTextW(edit_ctrl_hwnd, PCWSTR(text.as_ptr())) {
+            Ok(_) => {
+                info!("Successfully set window text");
+            }
+            Err(error) => {
+                error!("Error setting window text.\n{}", error);
+                return Err(error);
+            }
+        }
+
+        /*
+         * TODO: Set edit_ctrl dimensions
+         * SetWindowPos (stupid name for a resizing function)
+         */
+        error!("{} x {}", new_width, new_height);
+        SetWindowPos(
+            edit_ctrl_hwnd,
+            //HWND_NOTOPMOST, doesn't work
+            HWND_TOP,
+            info.rcWindow.left, // x
+            info.rcWindow.top,  // y
+            new_width,
+            new_height,
+            SWP_NOMOVE | SWP_SHOWWINDOW
+        ).into()
     }
 }
 
-pub fn init(class_name: &str, window_name: &str) -> HWND {
+unsafe fn build_edit_ctrl_container(parent_hwnd: HWND) -> HWND {
+    // Get dimensions
+    let mut client_rect: RECT = RECT { 
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0
+    };
+    GetClientRect(parent_hwnd, &mut client_rect);
+
+    println!("{:#?}", SS_NOTIFY.0);
+    CreateWindowExW(
+        WINDOW_EX_STYLE(0),
+        w!("STATIC"),
+        None,
+        WS_CHILD | WS_VISIBLE | WINDOW_STYLE(SS_NOTIFY.0),
+        0, 0, //pos
+        300, 100, //dimensions
+        parent_hwnd,
+        None,
+        None,
+        Some(null_mut()),
+    ).expect("Failed to create container")
+}
+
+pub fn build_window(class_name: &str, window_name: &str) -> HWND {
     unsafe {
         let h_instance = HINSTANCE(
             GetModuleHandleW(None)
@@ -183,27 +213,26 @@ pub fn init(class_name: &str, window_name: &str) -> HWND {
             lpszClassName: PCWSTR(class_name.as_ptr()),
         };
 
-        let atom = RegisterClassW(&window_class);
-        debug!("RegisterClassW return code: {:#?}", atom);
+        let _atom = RegisterClassW(&window_class);
 
+        // Primary OverlappedWindow
         let hwnd = CreateWindowExW(
             WINDOW_EX_STYLE(0_u32),
             PCWSTR(class_name.as_ptr()),
             PCWSTR(window_name.as_ptr()),
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            300,
-            100,
+            //CW_USEDEFAULT, CW_USEDEFAULT, // x,y pos
+            0, 0, // x,y pos
+            320, 100, // w,h dimensions
             None,
             None,
             h_instance,
             None,
         )
         .expect("Failed to create window");
-        debug!("Initial CreateWindowExW\n{:#?}", hwnd);
 
-        adjust_edit_ctrl(hwnd, None);
+        let container_hwnd = build_edit_ctrl_container(hwnd);
+        let _edit_ctrl_hwnd = edit_ctrl::build_window(container_hwnd);
 
         hwnd
     }
