@@ -63,6 +63,7 @@ pub unsafe fn build_window(parent_hwnd: HWND) -> HWND {
     let edit_ctrl_width = client_rect.right - client_rect.left - 20;
     //let edit_ctrl_height = 25;
     let edit_ctrl_height = client_rect.bottom - client_rect.top - 20;
+    println!("ec\nwidth: {} x height: {}", edit_ctrl_width, edit_ctrl_height);
 
     /* Experimenting with custom window class */
     /*

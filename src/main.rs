@@ -43,7 +43,7 @@ fn main() {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
 
-            error!("\n\nmsg: {}", message_to_string(msg.message));
+            //error!("\n\nmsg: {}", message_to_string(msg.message));
 
             if timer.elapsed() >= Duration::from_secs(1) {
                 timer = Instant::now();
