@@ -37,7 +37,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     LRESULT(0)
 }
 
-pub unsafe fn build_window(parent_hwnd: HWND) -> HWND {
+pub unsafe fn build_window(parent_hwnd: HWND, edit_ctrl_id: i32) -> HWND {
     /*
      * Create the Edit Control window
      */
@@ -45,11 +45,9 @@ pub unsafe fn build_window(parent_hwnd: HWND) -> HWND {
         .expect("Failed to get module handle")
         .into();
     let class_name = HSTRING::from("edit_ctrl");
-
     let edit_ctrl_text = HSTRING::from("Initial text");
-    //let edit_ctrl_width = 280;
 
-    /* I need a `*mut RECT` receptacle in memory */
+    //Receiving memory for the rectangle
     let mut client_rect: RECT = RECT { 
         left: 0,
         right: 0,
@@ -58,10 +56,7 @@ pub unsafe fn build_window(parent_hwnd: HWND) -> HWND {
     };
     GetClientRect(parent_hwnd, &mut client_rect);
 
-    //let client_rect = *client_rect;
-    //let edit_ctrl_width = 200;
     let edit_ctrl_width = client_rect.right - client_rect.left - 20;
-    //let edit_ctrl_height = 25;
     let edit_ctrl_height = client_rect.bottom - client_rect.top - 20;
     println!("ec\nwidth: {} x height: {}", edit_ctrl_width, edit_ctrl_height);
 
@@ -83,10 +78,8 @@ pub unsafe fn build_window(parent_hwnd: HWND) -> HWND {
     let _atom = RegisterClassW(&window_class);
     */
 
-    /* Doesn't display correctly initially */
     let edit_ctrl_hwnd = CreateWindowExW(
         WINDOW_EX_STYLE::default(),
-        //PCWSTR(class_name.as_ptr()),
         w!("EDIT"), // class name
         PCWSTR(edit_ctrl_text.as_ptr()),
         WS_CHILD | WS_VISIBLE | WS_BORDER
@@ -96,15 +89,13 @@ pub unsafe fn build_window(parent_hwnd: HWND) -> HWND {
         edit_ctrl_width,
         edit_ctrl_height,
         parent_hwnd, // where to put the edit control
-        None,
+        HMENU{ 0: edit_ctrl_id as *mut c_void },
         h_instance,
         Some(null_mut()),
     ).expect("Failed to create initial WindowExW");
 
     InvalidateRect(edit_ctrl_hwnd, None, true);
     UpdateWindow(edit_ctrl_hwnd);
-
-    trace!("Initial CreateWindowExW\n{:#?}", edit_ctrl_hwnd);
 
     edit_ctrl_hwnd
 }

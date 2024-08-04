@@ -1,41 +1,42 @@
+use tracing::{debug, error, info, trace, warn};
+
 use std::ptr::null_mut;
 use std::slice;
 
 use windows::{
     core::*,
     Win32::{
-        Foundation::{ HWND, SIZE },
+        Foundation::{HWND, SIZE},
         Graphics::Gdi::*,
-        UI::WindowsAndMessaging::{ GetDlgItemTextW, GetWindowTextW }
-    }
+        UI::WindowsAndMessaging::{GetDlgItemTextW, GetWindowTextW},
+    },
 };
 
-pub unsafe fn get_text_dimensions(hwnd: HWND) -> SIZE {
-    let mut text_size: windows::Win32::Foundation::SIZE = SIZE {
-        cx: 0,
-        cy: 0,
-    };
-
-    let device_context: HDC = GetDC(hwnd);
+pub unsafe fn get_text_dimensions(
+    parent_hwnd: HWND,
+    edit_ctrl_id: i32,
+) -> SIZE {
+    let device_context: HDC = GetDC(parent_hwnd);
+    debug!("device_context: {:#?}", device_context);
     //test for null return (failure)
+
+    let mut text_size: windows::Win32::Foundation::SIZE = Default::default();
     if device_context.0 == null_mut() {
         return text_size; // return (0,0)
     }
 
     /* This gets the text from the edit_control */
-    let text: &mut [u16] = &mut [];
-    GetDlgItemTextW(hwnd, 1, text);
+    let mut buffer: Vec<u16> = vec![0; 128];
+    let buffer_length = GetDlgItemTextW(parent_hwnd, edit_ctrl_id, &mut buffer);
+    debug!("Text length: {:?}", buffer_length);
+    debug!("Text: {:?}", String::from_utf16(&buffer).unwrap());
 
-    let something: Vec<u16> =
-        "This is a really long string that won't fit in the default edit_control dimensions."
-        .encode_utf16()
-        .collect();
-    let s_ptr: &[u16] = slice::from_raw_parts(something.as_ptr(), something.len());
-
-    //GetTextExtentPoint32W(device_context, text, &mut text_size as *mut _);
-    GetTextExtentPoint32W(device_context, s_ptr, &mut text_size as *mut _);
-    println!("\n\nText size: {:#?}", text_size);
-    println!("\n\nText: {:#?}", text);
+    /* TODO:
+     * Each line must be measured individually and added together
+     */
+    GetTextExtentPoint32W(device_context, &mut buffer, &mut text_size);
+    ReleaseDC(parent_hwnd, device_context);
+    info!("Text size:\n{:#?}", text_size);
 
     text_size
 }
