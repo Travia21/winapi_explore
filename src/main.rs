@@ -15,6 +15,8 @@ use windows::core::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
+use crate::utils::window_messages;
+
 /*
  * TODO:
  * Inside calculate, trim the u16 vector up to the first \0
@@ -39,6 +41,18 @@ use windows::Win32::UI::WindowsAndMessaging::*;
  * procedure can act on each event it receives, then modify or discard the event.
  */
 
+/*
+ * NOTE:
+ * GetWindowLong(window_handle: HWND, value_index: i32)
+ * Used to get one of the following values from a window:
+ * - window procedure handle
+ * - application instance handle
+ * - parent window handle
+ * - window identifier
+ * - window styles
+ * - extended window styles
+ * - user data associated with the window
+ */
 /// Display a window using the Windows API crate
 ///
 /// # Arguments
@@ -70,19 +84,16 @@ fn main() {
     // Message loop
     let mut msg: MSG = unsafe { std::mem::zeroed() };
     unsafe {
+        let mut timer = Instant::now();
         while IsWindow(hwnd).into() && GetMessageW(&mut msg, hwnd, 0, 0).into() {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
 
-            /* Every second
-            let mut timer = Instant::now();
+            /* Every second */
             if timer.elapsed() >= Duration::from_secs(1) {
                 timer = Instant::now();
-                primary::adjust_edit_ctrl(hwnd, Some(message_to_string(msg.message)))
-                    .expect("Failed to adjust text");
-                //enum_window::enum_window(primary::get_edit_ctrl_handle(hwnd));
+                println!("{:#?}", message_to_string(msg.message));
             }
-            */
         }
     }
 }

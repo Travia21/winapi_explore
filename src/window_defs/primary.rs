@@ -5,9 +5,12 @@ use crate::utils::calculate;
 use crate::utils::{calculate::get_text_dimensions, window_messages::message_to_string};
 use crate::window_defs::edit_ctrl;
 
+use std::borrow::BorrowMut;
 use std::fs::File;
 use std::io::prelude::*;
+use std::ops::DivAssign;
 use std::path::PathBuf;
+use std::time::{Instant, UNIX_EPOCH};
 
 use std::ffi::c_void;
 use std::mem;
@@ -30,31 +33,12 @@ const BUTTON2_ID: i32 = 202;
 const BUTTON3_ID: i32 = 203;
 const BUTTON4_ID: i32 = 204;
 
-/*
- * TODO:
- * Inside calculate, trim the u16 vector up to the first \0
- *
- * TODO:
- * Finish sizing the edit control properly
- *
- * TODO:
- * Resize the primary window and edit control container to properly contain the edit control and
- * buttons
- *
- * TODO:
- * Add a canvas for drawing lines and shapes
- */
-
-/**
- * `GetDlgItem()` requires the HWND to be the immediate parent of the window identifier.
- */
+/// `GetDlgItem()` requires the HWND to be the immediate parent of the window identifier.
 pub unsafe fn get_edit_ctrl_handle(main_window_hwnd: HWND) -> HWND {
     let container_hwnd =
-        GetDlgItem(main_window_hwnd, EDIT_CONT_ID).expect("Failed to get container_hwnd");
-    match GetDlgItem(container_hwnd, EDIT_CTRL_ID) {
-        Ok(handle) => handle,
-        Err(error) => panic!("{error}"),
-    }
+        GetDlgItem(main_window_hwnd, EDIT_CONT_ID).expect("Failed to get container handle");
+
+    GetDlgItem(container_hwnd, EDIT_CTRL_ID).expect("Failed to get edit_ctrl handle")
 }
 
 fn read_text_from_file(filename: Option<&str>) -> Result<String> {
@@ -124,6 +108,7 @@ unsafe extern "system" fn wndproc(
             let btn_class_name = HSTRING::from("BUTTON");
             let btn_y_pos: i32 = 50;
 
+            // Button 1
             CreateWindowExW(
                 WINDOW_EX_STYLE(0_u32),
                 PCWSTR(btn_class_name.as_ptr()),
@@ -140,6 +125,7 @@ unsafe extern "system" fn wndproc(
             )
             .unwrap();
 
+            // Button 2
             CreateWindowExW(
                 WINDOW_EX_STYLE(0_u32),
                 PCWSTR(btn_class_name.as_ptr()),
@@ -156,6 +142,7 @@ unsafe extern "system" fn wndproc(
             )
             .unwrap();
 
+            // Button 3
             CreateWindowExW(
                 WINDOW_EX_STYLE(0_u32),
                 PCWSTR(btn_class_name.as_ptr()),
@@ -172,6 +159,7 @@ unsafe extern "system" fn wndproc(
             )
             .unwrap();
 
+            // Button 4
             CreateWindowExW(
                 WINDOW_EX_STYLE(0_u32),
                 PCWSTR(btn_class_name.as_ptr()),
@@ -189,14 +177,15 @@ unsafe extern "system" fn wndproc(
             .unwrap();
 
             InvalidateRect(hwnd, None, true);
+            UpdateWindow(hwnd);
         }
         WM_COMMAND => {
-            println!("Primary -> WM_COMMAND");
+            trace!("Primary -> WM_COMMAND");
             //match LOWORD(wparam as DWORD)
             match wparam.0 as i32 & 0xffff {
                 BUTTON1_ID => {
                     info!("Button 1 here");
-                    pop_up(hwnd);
+                    SendMessageW(hwnd, WM_PAINT, WPARAM(0), LPARAM(0));
                 }
                 BUTTON2_ID => {
                     info!("Button 2 here");
@@ -208,18 +197,30 @@ unsafe extern "system" fn wndproc(
                 }
                 BUTTON3_ID => {
                     info!("Button 3 here");
-                    pop_up(hwnd);
+                    let window_style =
+                        WINDOW_STYLE(GetWindowLongW(get_edit_ctrl_handle(hwnd), GWL_STYLE) as u32);
+                    debug!("window style: {:#?}", window_style.0);
+                    adjust_edit_ctrl(hwnd, Some(&format!("Edit control ID: {:#?}", window_style)));
                 }
                 BUTTON4_ID => {
-                    info!("Button 4 here");
-                    pop_up(hwnd);
+                    println!("try to destroy");
+                    SendMessageW(hwnd, WM_DESTROY, WPARAM(0), LPARAM(0));
                 }
                 _ => (),
             }
 
             return LRESULT(0); //placeholder
         }
-        WM_DESTROY => PostQuitMessage(0),
+        WM_PAINT => {
+            //InvalidateRect(hwnd, None, true);
+            //UpdateWindow(hwnd);
+            DefWindowProcW(hwnd, msg, wparam, lparam);
+        }
+        // TODO: 
+        // Only seems to work after moving the window...
+        WM_DESTROY => {
+            PostQuitMessage(0);
+        }
         _ => return DefWindowProcW(hwnd, msg, wparam, lparam),
     }
     LRESULT(0)
@@ -288,33 +289,25 @@ pub fn adjust_edit_ctrl(
 
 // This function should be moved to edit_ctrl.rs
 unsafe fn build_edit_ctrl_container(parent_hwnd: HWND) -> HWND {
-    // Get dimensions
-    let mut client_rect: RECT = RECT {
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-    };
+    let mut client_rect: RECT = Default::default();
     GetClientRect(parent_hwnd, &mut client_rect);
+    let container_width = client_rect.right - client_rect.left;
 
-    println!("{:#?}", SS_NOTIFY.0);
     CreateWindowExW(
         WINDOW_EX_STYLE(0),
         w!("STATIC"),
         None,
         WS_CHILD | WS_VISIBLE | WINDOW_STYLE(SS_NOTIFY.0),
-        0,
-        0, //x,y pos
-        300,
-        50, //w,h dimensions
+        0,               // x
+        0,               // y
+        container_width, // width
+        50,              // height
         parent_hwnd,
-        HMENU {
-            0: EDIT_CONT_ID as *mut c_void,
-        },
+        HMENU(EDIT_CONT_ID as *mut c_void),
         None,
         Some(null_mut()),
     )
-    .expect("Failed to create container")
+    .expect("Failed to create edit control container")
 }
 
 pub fn build_window(
@@ -338,7 +331,8 @@ pub fn build_window(
             hInstance: h_instance,
             hIcon: LoadIconW(None, IDI_APPLICATION).expect("Failed to LoadIconW"),
             hCursor: LoadCursorW(None, IDC_ARROW).expect("Failed to LoadCursorW"),
-            hbrBackground: HBRUSH((COLOR_BACKGROUND.0 + 1) as _), // This is obtuse
+            hbrBackground: HBRUSH((COLOR_BTNFACE.0 + 1) as _), // This is obtuse, the +1 is
+                                                               // required
             lpszMenuName: PCWSTR(HSTRING::from("primary_menu").as_ptr()),
             lpszClassName: PCWSTR(class_name_h.as_ptr()),
         };
